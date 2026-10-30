@@ -294,9 +294,14 @@ public final class FabricEntrypoint implements ModInitializer {
         if (minecraftServer != server || config == null || !config.enabled || !config.statusEnabled) return original;
         PlayerSnapshot remote = relaySnapshot();
         List<FauxPlayerEntry> faux = statusEntries();
-        List<FauxPlayerEntry> real = minecraftServer.getPlayerList().getPlayers().stream()
-                .map(player -> new FauxPlayerEntry(player.getGameProfile().name(), player.getUUID(),
-                        player.getGameProfile().name(), 0, "SURVIVAL", false)).toList();
+        // Preserve the sample already present in the status response. Other mods (for example
+        // Hide Player) may have filtered this list before FauxPlayers rewrites the counts.
+        // Re-reading PlayerList here would re-introduce players that those mods intentionally hid.
+        List<FauxPlayerEntry> real = config.includeReal
+                ? original.players().map(ServerStatus.Players::sample).orElse(List.of()).stream()
+                        .map(entry -> new FauxPlayerEntry(entry.name(), entry.id(), entry.name(),
+                                0, "SURVIVAL", false)).toList()
+                : List.of();
         int online = PresentationMath.statusCount(config, remote, real.size(), faux.size());
         int max = config.useMax && remote.reportedMax() > 0 ? remote.reportedMax()
                 : config.fixedMax > 0 ? config.fixedMax
